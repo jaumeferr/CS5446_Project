@@ -448,7 +448,7 @@ class Combat(gym.Env):
                             and opp_health[target_opp] > 0:
                         # Fire
                         opp_health[target_opp] -= 1
-                        rewards[agent_i] += 1
+                        rewards[agent_i] += 10
 
                         # Update agent cooling down
                         self._agent_cool[agent_i] = False
@@ -505,9 +505,31 @@ class Combat(gym.Env):
         if (self._step_count >= self._max_steps) \
                 or (sum([v for k, v in self.opp_health.items()]) == 0) \
                 or (sum([v for k, v in self.agent_health.items()]) == 0):
+            #### Weidong's Edits v2 ####
+            #### Reducing the rewards of individual agent by enemy team health AT END only
+            for i in range(self.n_agents):
+                rewards[i] -= (0.1 / self.n_agents) * sum([v for k, v in self.opp_health.items()])
+                #### Weidong's Edits v4 ####
+                #### Adding or Subtracting Reward if win
+                if (sum([v for k, v in self.opp_health.items()]) == 0):
+                    rewards[i] += (5.0 / self.n_agents)
+                if (sum([v for k, v in self.agent_health.items()]) == 0):
+                    rewards[i] -= (5.0 / self.n_agents)
+                # $$$ End of Weidong's edits v4
+            # $$$ End of Weidongs Edits v2
             self._agent_dones = [True for _ in range(self.n_agents)]
 
+            #### Weidong's Edits v3 ####
+            #### Reducing the rewards of individual agent by difference in team health AT END only
+            # rewards[i] -= (0.1/self.n_agents)*(sum([v for k, v in self.opp_health.items()]) -sum([v for k, v in self.agent_health.items()]) )
+            #### End of Weidongs Edits v3
+            logger.debug(f'Game ended!')
+
         for i in range(self.n_agents):
+            #### Weidong's Edits v1 ####
+            #### Reducing the rewards of individual agent by enemy team health
+            # rewards[i] -= (0.1/self.n_agents)*sum([v for k, v in self.opp_health.items()])
+            #### End of Weidongs Edits v1
             self._total_episode_reward[i] += rewards[i]
 
         # Check for episode overflow
