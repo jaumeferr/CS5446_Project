@@ -46,33 +46,45 @@ class ReplayBuffer:
 
 
 class QNet(nn.Module):
-    def __init__(self, observation_space, action_space, recurrent=False):
+    def __init__(self, observation_space, action_space, recurrent=False, batch_size=64):
         super(QNet, self).__init__()
         self.num_agents = len(observation_space) #Each Agent has its observation space. Class Box
         self.recurrent = recurrent
         self.hx_size = 32 #Originally 32
+        self.batch_size = batch_size
         for agent_i in range(self.num_agents):
             n_obs = observation_space[agent_i].shape[0]
             ## Possible to re-do architecture, or tune the NN hyperparameters.
-            setattr(self, 'agent_feature_{}'.format(agent_i), nn.Sequential(nn.Linear(n_obs, 256).cuda(device),
+            setattr(self, 'agent_feature_{}'.format(agent_i), nn.Sequential(#nn.Linear(n_obs, 256).cuda(device),
+                                                                            # nn.ReLU().cuda(device),
+                                                                            # nn.Linear(256, self.hx_size).cuda(device),
+                                                                            # nn.ReLU().cuda(device),
+                                                                            nn.Conv1d(1, 32, 2, padding="valid").cuda(device),
+                                                                            # nn.MaxPool1d(2, 1).cuda(device),
                                                                             nn.ReLU().cuda(device),
-                                                                            nn.Linear(256, self.hx_size).cuda(device),
-                                                                            nn.ReLU().cuda(device)).cuda(device))
+                                                                            nn.Conv1d(32, 64, 2, padding="valid").cuda(device),
+                                                                            # nn.MaxPool1d(2, 1).cuda(device),
+                                                                            nn.ReLU().cuda(device)
+                                                                            ).cuda(device))
             if recurrent:
                 setattr(self, 'agent_gru_{}'.format(agent_i), nn.GRUCell(self.hx_size, self.hx_size).cuda(device))
-            setattr(self, 'agent_q_{}'.format(agent_i), nn.Linear(self.hx_size, action_space[agent_i].n).cuda(device))
+            # setattr(self, 'agent_q_{}'.format(agent_i), nn.Linear(self.hx_size, action_space[agent_i].n).cuda(device))
+            setattr(self, 'agent_q_{}'.format(agent_i), nn.Linear(47872, action_space[agent_i].n*self.num_agents).cuda(device))
 
     def forward(self, obs, hidden):
-        q_values = [torch.empty(obs.shape[0], device=device)] * self.num_agents
+        # q_values = [torch.empty(obs.shape[0], device=device)] * self.num_agents
         next_hidden = [torch.empty(obs.shape[0], 1, self.hx_size,device=device)] * self.num_agents
-        for agent_i in range(self.num_agents):
-            x = getattr(self, 'agent_feature_{}'.format(agent_i))(obs[:, agent_i, :])
-            if self.recurrent:
-                x = getattr(self, 'agent_gru_{}'.format(agent_i))(x, hidden[:, agent_i, :])
-                next_hidden[agent_i] = x.unsqueeze(1)
-            q_values[agent_i] = getattr(self, 'agent_q_{}'.format(agent_i))(x).unsqueeze(1)
+        # for agent_i in range(self.num_agents):
+        # x = getattr(self, 'agent_feature_{}'.format(agent_i))(obs[:, agent_i, :])
+        x = getattr(self, 'agent_feature_{}'.format(0))(obs.reshape((obs.shape[0], 1, -1)))
+        if self.recurrent:
+            x = getattr(self, 'agent_gru_{}'.format(0))(x, hidden[:, 0, :])
+            next_hidden[0] = x.unsqueeze(1)
+        x = torch.reshape(x, (obs.shape[0], -1)).to(device)
+        q_values = getattr(self, 'agent_q_{}'.format(0))(x).unsqueeze(1)
 
-        return torch.cat(q_values, dim=1).to(device), torch.cat(next_hidden, dim=1).to(device)
+        # return torch.cat(q_values, dim=1).to(device), torch.cat(next_hidden, dim=1).to(device)
+        return torch.reshape(q_values, (obs.shape[0], self.num_agents, -1)).to(device), torch.cat(next_hidden, dim=1).to(device)
 
     def sample_action(self, obs, hidden, epsilon):
         out, hidden = self.forward(obs, hidden) #Using the QNet to sample an action, we feed obs and get action.
@@ -150,7 +162,7 @@ def main(env_name, lr, gamma, batch_size, buffer_limit, log_interval, max_episod
     
 
     # create networks
-    q = QNet(env.observation_space, env.action_space, recurrent).to(device)
+    q = QNet(env.observation_space, env.action_space, recurrent, batch_size).to(device)
     q_target = QNet(env.observation_space, env.action_space, recurrent).to(device)
     q_target.load_state_dict(q.state_dict())
     optimizer = optim.Adam(q.parameters(), lr=lr)
