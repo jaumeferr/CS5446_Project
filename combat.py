@@ -448,7 +448,7 @@ class Combat(gym.Env):
                             and opp_health[target_opp] > 0:
                         # Fire
                         opp_health[target_opp] -= 1
-                        rewards[agent_i] += 5
+                        rewards[agent_i] += 3
 
                         # Update agent cooling down
                         self._agent_cool[agent_i] = False
@@ -473,7 +473,7 @@ class Combat(gym.Env):
                             and agent_health[target_agent] > 0:
                         # Fire
                         agent_health[target_agent] -= 1
-                        rewards[target_agent] -= 2
+                        rewards[target_agent] -= 1
 
                         # Update opp cooling down
                         self._opp_cool[opp_i] = False
@@ -513,7 +513,7 @@ class Combat(gym.Env):
                 #### Adding or Subtracting Reward if win
                 if (sum([v for k, v in self.opp_health.items()]) == 0):
                     rewards[i] += (50.0/self.n_agents)
-                if (sum([v for k, v in self.agent_health.items()]) == 0):
+                else: #(sum([v for k, v in self.agent_health.items()]) == 0):
                     rewards[i] -= (50.0/self.n_agents)
                 #$$$ End of Weidong's edits v4
             #$$$ End of Weidongs Edits v2
