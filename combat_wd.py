@@ -458,8 +458,6 @@ class Combat(gym.Env):
                         if opp_health[target_opp] == 0:
                             pos = self.opp_pos[target_opp]
                             self._full_obs[pos[0]][pos[1]] = PRE_IDS['empty']
-                    else: # WD Editsv5: Prevent Agent from blindly attacking. We want them to attack only when they are meant to.
-                        rewards[agent_i] -= 1/20
 
                 # Update agent cooling down
                 self._agent_cool_step[agent_i] = max(self._agent_cool_step[agent_i] - 1, 0)
@@ -514,7 +512,7 @@ class Combat(gym.Env):
                 #### Weidong's Edits v4 ####
                 #### Adding or Subtracting Reward if win
                 if (sum([v for k, v in self.opp_health.items()]) == 0):
-                    rewards[i] += (50.0*(self._max_steps/self._step_count)/self.n_agents) # WD edits v6 - higher reward and favour early wins.
+                    rewards[i] += (50.0/self.n_agents)
                 else: #(sum([v for k, v in self.agent_health.items()]) == 0):
                     rewards[i] -= (50.0/self.n_agents)
                 #$$$ End of Weidong's edits v4

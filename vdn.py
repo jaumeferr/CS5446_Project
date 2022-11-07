@@ -9,7 +9,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import os
 
-USE_WANDB = True  # if enabled, logs data on wandb server
+USE_WANDB = False  # if enabled, logs data on wandb server
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -50,16 +50,14 @@ class QNet(nn.Module):
         super(QNet, self).__init__()
         self.num_agents = len(observation_space) #Each Agent has its observation space. Class Box
         self.recurrent = recurrent
-        self.hx_size = 32 #Originally 32
+        self.hx_size = 16 #Originally 32
         for agent_i in range(self.num_agents):
             n_obs = observation_space[agent_i].shape[0]
             ## Possible to re-do architecture, or tune the NN hyperparameters.
-            setattr(self, 'agent_feature_{}'.format(agent_i), nn.Sequential(nn.Linear(n_obs, 256).cuda(device),
-                                                                            nn.ReLU().cuda(device),
-                                                                            nn.Linear(256, self.hx_size).cuda(device),
-                                                                            nn.ReLU().cuda(device)).cuda(device))
+            setattr(self, 'agent_feature_{}'.format(agent_i), nn.Sequential(nn.Linear(n_obs, 32).cuda(device),
+                                                                            nn.ReLU().cuda(device)))
             if recurrent:
-                setattr(self, 'agent_gru_{}'.format(agent_i), nn.GRUCell(self.hx_size, self.hx_size).cuda(device))
+                setattr(self, 'agent_gru_{}'.format(agent_i), nn.GRUCell(32, self.hx_size).cuda(device))
             setattr(self, 'agent_q_{}'.format(agent_i), nn.Linear(self.hx_size, action_space[agent_i].n).cuda(device))
 
     def forward(self, obs, hidden):
@@ -157,6 +155,18 @@ def main(env_name, lr, gamma, batch_size, buffer_limit, log_interval, max_episod
 
     score = 0
     for episode_i in range(max_episodes):
+        for param_group in optimizer.param_groups:
+            if episode_i <500:
+                param_group['lr'] = 0.0003
+                #param_group['lr'] = max(0.0001, lr/6*((max_episodes-episode_i)/max_episodes))
+            elif episode_i < 1500:
+                param_group['lr'] = 0.00015
+            elif episode_i < 13500:
+                param_group['lr'] = 0.0001
+            else:
+                param_group['lr'] = 0.00005
+        if episode_i%1000 == 0:
+            print(param_group['lr'])
         epsilon = max(min_epsilon, max_epsilon - (max_epsilon - min_epsilon) * (episode_i / (0.6 * max_episodes)))
         state = env.reset()
         done = [False for _ in range(env.n_agents)]
@@ -198,13 +208,15 @@ if __name__ == '__main__':
     parser.add_argument('--env-name', required=False, default='ma_gym:Combat-v0')
     parser.add_argument('--seed', type=int, default=1, required=False)
     parser.add_argument('--no-recurrent', action='store_true')
-    parser.add_argument('--max-episodes', type=int, default=10000, required=False)
-    parser.add_argument('--gamma', type=float, default=0.75, required=False)
+    parser.add_argument('--max-episodes', type=int, default=5000, required=False)
+    parser.add_argument('--gamma', type=float, default=0.70, required=False)
+    parser.add_argument('--member', type=str, required=True)
+    parser.add_argument('--run', type=int,required=True)
 
     # Process arguments
     args = parser.parse_args()
     script_path = os.path.dirname(os.path.realpath(__file__))
-    model_path = os.path.join(script_path, f'{args.gamma}_gamma_model.pt')
+    model_path = os.path.join(script_path, f'{args.gamma}_gamma_{args.member}_v{args.run}_recurrent_{str(not args.no_recurrent)}.pt')
     kwargs = {'env_name': args.env_name,
               'lr': 0.01,
               'batch_size': 64,
