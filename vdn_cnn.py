@@ -59,24 +59,26 @@ class QNet(nn.Module):
                                                                             # nn.ReLU().cuda(device),
                                                                             # nn.Linear(256, self.hx_size).cuda(device),
                                                                             # nn.ReLU().cuda(device),
-                                                                            nn.Conv1d(1, 32, 2, padding="valid").cuda(device),
+                                                                            nn.Conv2d(1, 32, 2, padding="same").cuda(device),
                                                                             # nn.MaxPool1d(2, 1).cuda(device),
                                                                             nn.ReLU().cuda(device),
-                                                                            nn.Conv1d(32, 64, 2, padding="valid").cuda(device),
+                                                                            nn.Conv2d(32, 64, 2, padding="valid").cuda(device),
                                                                             # nn.MaxPool1d(2, 1).cuda(device),
+                                                                            nn.ReLU().cuda(device),
+                                                                            nn.Conv2d(64, 128, 2, padding="valid").cuda(device),
                                                                             nn.ReLU().cuda(device)
                                                                             ).cuda(device))
             if recurrent:
                 setattr(self, 'agent_gru_{}'.format(agent_i), nn.GRUCell(self.hx_size, self.hx_size).cuda(device))
             # setattr(self, 'agent_q_{}'.format(agent_i), nn.Linear(self.hx_size, action_space[agent_i].n).cuda(device))
-            setattr(self, 'agent_q_{}'.format(agent_i), nn.Linear(47872, action_space[agent_i].n*self.num_agents).cuda(device))
+            setattr(self, 'agent_q_{}'.format(agent_i), nn.Linear(82432, action_space[agent_i].n*self.num_agents).cuda(device))
 
     def forward(self, obs, hidden):
         # q_values = [torch.empty(obs.shape[0], device=device)] * self.num_agents
         next_hidden = [torch.empty(obs.shape[0], 1, self.hx_size,device=device)] * self.num_agents
         # for agent_i in range(self.num_agents):
         # x = getattr(self, 'agent_feature_{}'.format(agent_i))(obs[:, agent_i, :])
-        x = getattr(self, 'agent_feature_{}'.format(0))(obs.reshape((obs.shape[0], 1, -1)))
+        x = getattr(self, 'agent_feature_{}'.format(0))(obs.reshape((obs.shape[0], 1, (obs.shape[1]*obs.shape[2])//30, -1)))
         if self.recurrent:
             x = getattr(self, 'agent_gru_{}'.format(0))(x, hidden[:, 0, :])
             next_hidden[0] = x.unsqueeze(1)
@@ -169,7 +171,13 @@ def main(env_name, lr, gamma, batch_size, buffer_limit, log_interval, max_episod
 
     score = 0
     for episode_i in range(max_episodes):
-        epsilon = max(min_epsilon, max_epsilon - (max_epsilon - min_epsilon) * (episode_i / (0.6 * max_episodes)))
+        for param_group in optimizer.param_groups:
+            param_group['lr'] = max(0.0001, lr*((max_episodes-episode_i)/max_episodes))
+        # if episode_i> (max_episodes/3):
+        #     epsilon = max(min_epsilon, max_epsilon - (max_epsilon - min_epsilon) * (episode_i / (max_episodes)))
+        # else :
+        #     epsilon = max_epsilon - (max_epsilon - min_epsilon) * (episode_i / (3 * max_episodes))
+        epsilon = max(min_epsilon, max_epsilon - (max_epsilon - min_epsilon) * (episode_i / (max_episodes)))
         state = env.reset()
         done = [False for _ in range(env.n_agents)]
         with torch.no_grad():
@@ -210,7 +218,7 @@ if __name__ == '__main__':
     parser.add_argument('--env-name', required=False, default='ma_gym:Combat-v0')
     parser.add_argument('--seed', type=int, default=1, required=False)
     parser.add_argument('--no-recurrent', action='store_true')
-    parser.add_argument('--max-episodes', type=int, default=10000, required=False)
+    parser.add_argument('--max-episodes', type=int, default=20000, required=False)
     parser.add_argument('--gamma', type=float, default=0.75, required=False)
 
     # Process arguments
@@ -218,7 +226,7 @@ if __name__ == '__main__':
     script_path = os.path.dirname(os.path.realpath(__file__))
     model_path = os.path.join(script_path, f'{args.gamma}_gamma_model.pt')
     kwargs = {'env_name': args.env_name,
-              'lr': 0.01,
+              'lr': 0.001,
               'batch_size': 64,
               'gamma': args.gamma,
               'buffer_limit': 50000,
