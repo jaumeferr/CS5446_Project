@@ -234,7 +234,7 @@ if __name__ == '__main__':
               'update_target_interval': 20,
               'log_interval': 100,
               'max_episodes': args.max_episodes,
-              'max_epsilon': 0.9,
+              'max_epsilon': 0.5,
               'min_epsilon': 0.1,
               'test_episodes': 5,
               'warm_up_steps': 2000,
