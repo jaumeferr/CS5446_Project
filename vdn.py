@@ -9,7 +9,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import os
 
-USE_WANDB = False  # if enabled, logs data on wandb server
+USE_WANDB = True  # if enabled, logs data on wandb server
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -139,9 +139,10 @@ def save_model(model):
 
 # Can tweak the lr. We might need the LR decreasing method.
 def main(env_name, lr, gamma, batch_size, buffer_limit, log_interval, max_episodes, max_epsilon, min_epsilon,
-         test_episodes, warm_up_steps, update_iter, chunk_size, update_target_interval, recurrent):
+         test_episodes, warm_up_steps, update_iter, chunk_size, update_target_interval, recurrent, train_seed):
 
     # create env.
+    
     env = gym.make(env_name)
     test_env = gym.make(env_name)
     memory = ReplayBuffer(buffer_limit)
@@ -161,13 +162,15 @@ def main(env_name, lr, gamma, batch_size, buffer_limit, log_interval, max_episod
                 #param_group['lr'] = max(0.0001, lr/6*((max_episodes-episode_i)/max_episodes))
             elif episode_i < 1500:
                 param_group['lr'] = 0.00015
-            elif episode_i < 13500:
+            elif episode_i < 3500:
                 param_group['lr'] = 0.0001
             else:
                 param_group['lr'] = 0.00005
         if episode_i%1000 == 0:
             print(param_group['lr'])
-        epsilon = max(min_epsilon, max_epsilon - (max_epsilon - min_epsilon) * (episode_i / (0.6 * max_episodes)))
+        epsilon = max(min_epsilon, max_epsilon - (max_epsilon - min_epsilon) * (episode_i / (0.7 * max_episodes)))
+        if train_seed != -1:
+            env.seed(train_seed)
         state = env.reset()
         done = [False for _ in range(env.n_agents)]
         with torch.no_grad():
@@ -206,7 +209,7 @@ if __name__ == '__main__':
     # Lets gather arguments
     parser = argparse.ArgumentParser(description='Value Decomposition Network (VDN)')
     parser.add_argument('--env-name', required=False, default='ma_gym:Combat-v0')
-    parser.add_argument('--seed', type=int, default=1, required=False)
+    parser.add_argument('--seed', type=int, default=-1, required=False)
     parser.add_argument('--no-recurrent', action='store_true')
     parser.add_argument('--max-episodes', type=int, default=5000, required=False)
     parser.add_argument('--gamma', type=float, default=0.70, required=False)
@@ -231,7 +234,8 @@ if __name__ == '__main__':
               'warm_up_steps': 2000,
               'update_iter': 10,
               'chunk_size': 20,  # if not recurrent, internally, we use chunk_size of 1 and no gru cell is used.
-              'recurrent': not args.no_recurrent}
+              'recurrent': not args.no_recurrent,
+              'train_seed':args.seed}
 
     if USE_WANDB:
         import wandb
