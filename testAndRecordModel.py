@@ -1,9 +1,13 @@
 import os
 import torch.nn as nn
+import torch
 
-
+#Please Falsify the flag if we want to generalise
+seedFlag = True
 script_path = os.path.dirname(os.path.realpath(__file__))
-model_path = os.path.join(script_path, 'model.pt')
+model_path = os.path.join(script_path, '0.75_gamma_wd_v4_recurrent_True.pt')
+device = torch.device("cpu")
+
 
 def writeLog(filepath, count):
     file=open(filepath,"w+")
@@ -36,22 +40,19 @@ class QNet(nn.Module):
         super(QNet, self).__init__()
         self.num_agents = len(observation_space) #Each Agent has its observation space. Class Box
         self.recurrent = recurrent
-        self.hx_size = 32 #Originally 32
+        self.hx_size = 16 #Originally 32
         for agent_i in range(self.num_agents):
             n_obs = observation_space[agent_i].shape[0]
             ## Possible to re-do architecture, or tune the NN hyperparameters.
-            setattr(self, 'agent_feature_{}'.format(agent_i), nn.Sequential(
-                                                                            nn.Linear(n_obs, 256),
-                                                                            nn.ReLU(),
-                                                                            nn.Linear(256, self.hx_size),
-                                                                            nn.ReLU()))
+            setattr(self, 'agent_feature_{}'.format(agent_i), nn.Sequential(nn.Linear(n_obs, 32).to(device),
+                                                                            nn.ReLU().to(device)))
             if recurrent:
-                setattr(self, 'agent_gru_{}'.format(agent_i), nn.GRUCell(self.hx_size, self.hx_size))
-            setattr(self, 'agent_q_{}'.format(agent_i), nn.Linear(self.hx_size, action_space[agent_i].n))
+                setattr(self, 'agent_gru_{}'.format(agent_i), nn.GRUCell(32, self.hx_size).to(device))
+            setattr(self, 'agent_q_{}'.format(agent_i), nn.Linear(self.hx_size, action_space[agent_i].n).to(device))
 
     def forward(self, obs, hidden):
-        q_values = [torch.empty(obs.shape[0],)] * self.num_agents
-        next_hidden = [torch.empty(obs.shape[0], 1, self.hx_size)] * self.num_agents
+        q_values = [torch.empty(obs.shape[0], device=device)] * self.num_agents
+        next_hidden = [torch.empty(obs.shape[0], 1, self.hx_size,device=device)] * self.num_agents
         for agent_i in range(self.num_agents):
             x = getattr(self, 'agent_feature_{}'.format(agent_i))(obs[:, agent_i, :])
             if self.recurrent:
@@ -59,22 +60,18 @@ class QNet(nn.Module):
                 next_hidden[agent_i] = x.unsqueeze(1)
             q_values[agent_i] = getattr(self, 'agent_q_{}'.format(agent_i))(x).unsqueeze(1)
 
-        return torch.cat(q_values, dim=1), torch.cat(next_hidden, dim=1)
+        return torch.cat(q_values, dim=1).to(device), torch.cat(next_hidden, dim=1).to(device)
 
     def sample_action(self, obs, hidden, epsilon):
         out, hidden = self.forward(obs, hidden) #Using the QNet to sample an action, we feed obs and get action.
-        mask = (torch.rand((out.shape[0],)) <= epsilon)
-        action = torch.empty((out.shape[0], out.shape[1],))
-        action[mask] = torch.randint(0, out.shape[2], action[mask].shape).float()
+        mask = (torch.rand((out.shape[0],)).to(device) <= epsilon)
+        action = torch.empty((out.shape[0], out.shape[1],)).to(device)
+        action[mask] = torch.randint(0, out.shape[2], action[mask].shape).float().to(device)
         action[~mask] = out[~mask].argmax(dim=2).float()
         return action, hidden
 
-    def get_action(self, obs, hidden):
-        action, hidden = self.forward(obs, hidden)
-        return action, hidden
-
     def init_hidden(self, batch_size=1):
-        return torch.zeros((batch_size, self.num_agents, self.hx_size))
+        return torch.zeros((batch_size, self.num_agents, self.hx_size)).to(device)
 
 
 target = int(input("How many simulations would you like to perform?"))
@@ -85,8 +82,10 @@ for i in range(target):
     count += 1
     score = 0
     print(count)
-    directory = f'ma-gym\\recordings\\{count}'
+    directory = f'recordings\\{count}'
     env=Monitor(env, directory=directory)
+    if seedFlag:
+        env.seed(2)
     state=env.reset()
 
     with torch.no_grad():

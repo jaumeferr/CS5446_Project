@@ -42,7 +42,7 @@ class Combat(gym.Env):
     Reference : Learning Multiagent Communication with Backpropagation
     Url : https://papers.nips.cc/paper/6398-learning-multiagent-communication-with-backpropagation.pdf
     """
-    metadata = {'render.modes': ['human', 'rgb_array'], 'video.frames_per_second':5}
+    metadata = {'render.modes': ['human', 'rgb_array']}
 
     def __init__(self, grid_shape=(15, 15), n_agents=5, n_opponents=5, init_health=3, full_observable=False,
                  step_cost=0, max_steps=100, step_cool=1):
@@ -441,7 +441,24 @@ class Combat(gym.Env):
         # processing attacks
         agent_health, opp_health = copy.copy(self.agent_health), copy.copy(self.opp_health)
         for agent_i, action in enumerate(agents_action):
+            N_allies = 0
+            N_opp = 0
             if self.agent_health[agent_i] > 0:
+                
+                for o in self.opp_pos: 
+                    if self.is_visible(self.agent_po[agent_i, o]):
+                        N_opp += 1
+                for a in self.agent_pos:
+                    if self.is_visible(self.agent_pos[agent_i], a)
+                        N_allies += 1
+                        
+                if N_opp > N_allies:
+                    rewards[agent_i] -= (N_opp - N_allies) * 1/40
+                    
+                if N_allies > N_opp:
+                    rewards[agent_i] += (N_allies - N_opp) * 1/40 * 2
+                        
+                
                 if action > 4:  # attack actions
                     target_opp = action - 5
                     if self.is_fireable(self._agent_cool[agent_i], self.agent_pos[agent_i], self.opp_pos[target_opp]) \
@@ -458,8 +475,6 @@ class Combat(gym.Env):
                         if opp_health[target_opp] == 0:
                             pos = self.opp_pos[target_opp]
                             self._full_obs[pos[0]][pos[1]] = PRE_IDS['empty']
-                    else: # WD Editsv5: Prevent Agent from blindly attacking. We want them to attack only when they are meant to.
-                        rewards[agent_i] -= 1/20
 
                 # Update agent cooling down
                 self._agent_cool_step[agent_i] = max(self._agent_cool_step[agent_i] - 1, 0)
@@ -514,7 +529,7 @@ class Combat(gym.Env):
                 #### Weidong's Edits v4 ####
                 #### Adding or Subtracting Reward if win
                 if (sum([v for k, v in self.opp_health.items()]) == 0):
-                    rewards[i] += (50.0*(self._max_steps/self._step_count)/self.n_agents) # WD edits v6 - higher reward and favour early wins.
+                    rewards[i] += (50.0/self.n_agents)
                 else: #(sum([v for k, v in self.agent_health.items()]) == 0):
                     rewards[i] -= (50.0/self.n_agents)
                 #$$$ End of Weidong's edits v4
