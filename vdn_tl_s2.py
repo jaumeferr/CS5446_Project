@@ -9,7 +9,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import os
 
-USE_WANDB = True  # if enabled, logs data on wandb server
+USE_WANDB = True # if enabled, logs data on wandb server
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -137,6 +137,10 @@ def save_model(model):
     data = (model.state_dict(), model.hx_size, model.recurrent)
     torch.save(data, model_path)
 
+def get_model(model_path):
+    model_state_dict, _, _ = torch.load(model_path)
+    return model_state_dict
+
 # Can tweak the lr. We might need the LR decreasing method.
 def main(env_name, lr, gamma, batch_size, buffer_limit, log_interval, max_episodes, max_epsilon, min_epsilon,
          test_episodes, warm_up_steps, update_iter, chunk_size, update_target_interval, recurrent, train_seed):
@@ -150,6 +154,7 @@ def main(env_name, lr, gamma, batch_size, buffer_limit, log_interval, max_episod
 
     # create networks
     q = QNet(env.observation_space, env.action_space, recurrent).to(device)
+    q.load_state_dict(get_model(load_model_path))
     q_target = QNet(env.observation_space, env.action_space, recurrent).to(device)
     q_target.load_state_dict(q.state_dict())
     optimizer = optim.Adam(q.parameters(), lr=lr)
@@ -158,19 +163,21 @@ def main(env_name, lr, gamma, batch_size, buffer_limit, log_interval, max_episod
     for episode_i in range(max_episodes):
         for param_group in optimizer.param_groups:
             if episode_i <500:
-                param_group['lr'] = 0.0003
+                param_group['lr'] = 0.00015
                 #param_group['lr'] = max(0.0001, lr/6*((max_episodes-episode_i)/max_episodes))
             elif episode_i < 1500:
-                param_group['lr'] = 0.00015
-            elif episode_i < 3500:
                 param_group['lr'] = 0.0001
-            else:
+            elif episode_i < 3500:
                 param_group['lr'] = 0.00005
+            else:
+                param_group['lr'] = 0.00002
         if episode_i%1000 == 0:
             print(param_group['lr'])
         epsilon = max(min_epsilon, max_epsilon - (max_epsilon - min_epsilon) * (episode_i / (0.7 * max_episodes)))
-        if train_seed != -1:
+        if train_seed > -1:
             env.seed(train_seed)
+        elif train_seed == -2:
+            env.seed(np.random.randint(0,10))
         state = env.reset()
         done = [False for _ in range(env.n_agents)]
         with torch.no_grad():
@@ -215,25 +222,29 @@ if __name__ == '__main__':
     parser.add_argument('--gamma', type=float, default=0.70, required=False)
     parser.add_argument('--member', type=str, required=True)
     parser.add_argument('--run', type=int,required=True)
-
+    parser.add_argument('--max-epsilon', type=float, default=0.5, required=False)
+    parser.add_argument('--batch-size', type=int, default=64, required=False)
+    parser.add_argument('--chunk-size', type=int, default=20, required=False)
+    
     # Process arguments
     args = parser.parse_args()
     script_path = os.path.dirname(os.path.realpath(__file__))
     model_path = os.path.join(script_path, f'{args.gamma}_gamma_{args.member}_v{args.run}_recurrent_{str(not args.no_recurrent)}.pt')
+    load_model_path = os.path.join(script_path,'models/0.7_gamma_wd_v113_recurrent_True.pt')
     kwargs = {'env_name': args.env_name,
               'lr': 0.01,
-              'batch_size': 64,
+              'batch_size': args.batch_size,
               'gamma': args.gamma,
               'buffer_limit': 50000,
               'update_target_interval': 20,
               'log_interval': 100,
               'max_episodes': args.max_episodes,
-              'max_epsilon': 0.9,
+              'max_epsilon': args.max_epsilon,
               'min_epsilon': 0.1,
               'test_episodes': 5,
               'warm_up_steps': 2000,
               'update_iter': 10,
-              'chunk_size': 20,  # if not recurrent, internally, we use chunk_size of 1 and no gru cell is used.
+              'chunk_size': args.chunk_size,  # if not recurrent, internally, we use chunk_size of 1 and no gru cell is used.
               'recurrent': not args.no_recurrent,
               'train_seed':args.seed}
 

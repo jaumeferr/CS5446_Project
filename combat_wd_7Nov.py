@@ -42,7 +42,7 @@ class Combat(gym.Env):
     Reference : Learning Multiagent Communication with Backpropagation
     Url : https://papers.nips.cc/paper/6398-learning-multiagent-communication-with-backpropagation.pdf
     """
-    metadata = {'render.modes': ['human', 'rgb_array'], 'video.frames_per_second':5}
+    metadata = {'render.modes': ['human', 'rgb_array']}
 
     def __init__(self, grid_shape=(15, 15), n_agents=5, n_opponents=5, init_health=3, full_observable=False,
                  step_cost=0, max_steps=100, step_cool=1):
